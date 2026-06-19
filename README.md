@@ -11,7 +11,7 @@ Ce projet final de forage de données comporte deux volets : (1) la segmentation
 ## Méthode
 - Importation et nettoyage des données clients et covid
 - Statistiques descriptives et visualisations (âge, revenu, durée d'adhésion, engagement, etc. — voir les graphiques `.png` du dossier `clients/`)
-- Construction de modèles de classification (k plus proches voisins - KNN, analyse en composantes principales) pour la segmentation des clients
+- Construction de modèles de classification (k plus proches voisins - KNN, réseaux de neuronnes, analyse en composantes principales) pour la segmentation des clients
 - Prédiction sur des observations incomplètes ou nouvelles (`Clients_null` dans le projet original)
 
 ## Résultats
