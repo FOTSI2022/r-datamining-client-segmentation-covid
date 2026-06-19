@@ -1,0 +1,114 @@
+# Chargement des packages
+```{r}
+#library(Rcmdr)
+#library(DataExplorer)
+library(ggplot2)
+setwd(getwd())
+```
+
+# Importation des données
+```{r}
+library(readxl)
+COVID_impact <- read_excel("COVID-impact.xlsx")
+View(COVID_impact)
+```
+
+# Importation des données de validation
+```{r}
+library(readxl)
+COVID_impact <- read_excel("COVID-impact_null.xlsx")
+View(COVID_impact)
+```
+
+# Le code suivant permet de definir les facteurs et mettre les etiquettes sur les variables
+```{r}
+Covid <-within(COVID_impact,
+    {
+      Work_From_Home  <- factor(Work_From_Home , levels=c(0,1),labels=c("Non","Oui")) 
+      
+      Increased_Work_Hours  <- factor(Increased_Work_Hours, levels=c(0,1),labels=c("Maintien ou une diminution", "augmentation"))
+           
+      Productivity_Change  <- factor(Productivity_Change, levels=c(0,1),labels=c("Aucun changement", "Augmentation ou une diminution de la productivité"))
+      
+    Health_Issue  <- factor(Health_Issue, levels=c(0,1),labels=c("Non", "Oui"))
+         
+      Job_Security <- factor(Job_Security, levels=c(0,1),labels=c("Plus de sécurité", "Moindre sécurité"))
+         
+      Childcare_Responsibilities  <- factor(Childcare_Responsibilities , levels=c(0,1),labels=c("aucun changement ou diminution", "augmentation responsabilités"))
+         
+      Commuting_Changes  <- factor(Commuting_Changes , levels=c(0,1),labels=c("absence de changement", "changements"))
+      
+      Technology_Adaptation <- factor(Technology_Adaptation , levels=c(0,1),labels=c("Non", "Oui"))
+      
+      Salary_Changes  <- factor(Salary_Changes, levels=c(0,1),labels=c("Salaire inchangé", "Augmentation ou diminution"))
+      
+      
+     Team_Collaboration_Challenges  <- factor(Team_Collaboration_Challenges, levels=c(0,1),labels=c("Non", "Oui"))
+      
+         Affected_by_Covid   <- factor(Affected_by_Covid, levels=c(0,1),labels=c("Non", "Oui"))
+      
+      
+        
+      Stress_Level  <- factor(Stress_Level)
+      Sector <- factor(Sector)
+    
+    } 
+                 )
+
+#print(Covid)
+#install.packages("writexl")
+#library(writexl)
+#write_xlsx(Covid, path = "Covid.xlsx")
+#write_xlsx(Covid, path = "Covid_null.xlsx")
+#write.csv(Covid, file ='Covid.csv')
+```
+
+
+# Analyse Sector sur Work_From_Home
+```{r}
+ggplot(Covid,aes(x = Work_From_Home, y = Hours_Worked_Per_Day))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+```
+
+
+```{r}
+library(ggplot2)
+par(mfrow=c(1,2))
+
+# Graphique de la distribution des heures de travail par jour en fonction du travail à domicile
+ggplot(Covid, aes(x = Work_From_Home, y = Hours_Worked_Per_Day)) +
+  geom_boxplot() +
+  labs(title = "Distribution des heures de travail par jour en fonction du travail à domicile",
+       x = "Travail à domicile",
+       y = "Heures travaillées par jour") +
+  theme_minimal()
+
+# Graphique de la distribution de sector en fonction du travail à domicile, ajouter les pourcentages interieur par modalité
+ggplot(Covid, aes(x = Sector, fill = Work_From_Home)) +
+  geom_bar(position = "fill") +
+  labs(title = "Distribution de sector en fonction du travail à domicile",
+       x = "Secteur",
+       y = "Proportion") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal()
+
+```
+```{r}
+# Graphique montrant la distribution des modalités de work_from_home par sector
+ggplot(Covid, aes(x=Sector, y=, fill=Work_From_Home)) +
+  geom_bar(stat="identity", position=position_dodge(width=0.9)) +
+  geom_text(aes(label=sprintf("%.2f%%", percent)),
+            position=position_dodge(width=0.9), vjust=-0.25, size=3.5) +
+  scale_fill_manual(values=c("Oui"="#C44E52", "Non"="#4477AA")) +
+  labs(title="Influence du secteur sur le télétravail",
+       x="", y="Pourcentage") +
+  theme_minimal() +
+  theme(legend.title=element_blank())
+```
+
+

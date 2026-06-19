@@ -1,0 +1,489 @@
+
+# Liste des packages utiles
+```{r}
+library(MASS) 
+library(dplyr) 
+library(tidyr) 
+library(dplyr)
+library(magrittr)
+library(readxl) #lecture du fichier
+library(tidyverse) #graphique et traitement base de données
+library(caret) # classification
+library(ggplot2) #graphique
+library(FNN) #regression KNN
+library(questionr) #relation entre variable cible et var categorielles
+library(FactoMineR) #ACP
+library(e1071) #validation croisee
+library(klaR)
+library(ROCR)
+library(class)
+library(kknn) # kknn classification
+library(randomForest)
+theme_set(theme_classic())
+```
+
+
+# Importation des données
+```{r}
+set.seed(1)
+# Definir le repertoire de travail
+setwd('C:/Users/Elvis/GIT_DOSSIER_2/ELVIS/ETUDES CANADA/Laval AD/Automne 2024/forage de donnees/SIO-6003-A24_Projet final/Clients')
+
+# Lecture de la base de données
+Dataset <- read_excel("Clients.xlsx")
+
+#lecture du fichier à predire
+clients_null_e <- read_excel("Clients_null.xlsx")
+
+# Visualisation de la base de données
+View(Dataset)
+
+# Structure de la base de données
+str(Dataset)
+```
+
+```{r}
+
+# Création de la variabe seuil_panier
+Dataset$Seuil_panier <- ifelse(test = Dataset$Moy_valeur_panier <= 150, 
+                               yes = ' 150 $ ou moins',
+                               no = ' Plus 150 $')
+
+# Factorisation des variables qualitatives
+Dataset[c(3,8,10,14)] <- lapply(Dataset[c(3,8,10, 14)], as.factor)
+
+# Visualisation
+Dataset
+#library(writexl)
+#write_xlsx(Dataset, path = "Dataset.xlsx")
+```
+
+```{r}
+# Base de prediction
+clients_null_e <- read_excel("Clients_null.xlsx")
+# Création de la variabe seuil_panier
+clients_null_e$Seuil_panier <- ifelse(test = clients_null_e$Moy_valeur_panier <= 150, 
+                               yes = ' 150 $ ou moins',
+                               no = ' Plus 150 $')
+# Factorisation des variables qualitatives
+clients_null_e[c(3,8,10,14)] <- lapply(clients_null_e[c(3,8,10, 14)], as.factor)
+
+clients_null_e <- clients_null_e[,-7]
+
+```
+
+#Analyse descriptives
+
+```{r}
+# Extraction des des variables categorielles pour tableau de synthese
+base_cate <- Dataset[c(3,8,9,10,14)]
+
+#Tableau de fréquence des variables qualitatives
+gather(base_cate, "var", "value") %>%
+  count(var, value) %>%
+  group_by(var) %>%             
+  mutate(prop = round(prop.table(n),4)*100)
+```
+# Analyse des variables numériques
+```{r}
+# Extraction des des variables categorielles pour tableau de synthese
+base_nume <- Dataset[c(2,4, 5, 6, 7, 11, 12, 13)]
+summary(base_nume)
+
+sd(base_nume$Age)
+sd(base_nume$Revenu)
+sd(base_nume$Durée_adhésion)
+sd(base_nume$Dernier_achat)
+sd(base_nume$Moy_valeur_panier)
+sd(base_nume$Visites_en_ligne_dernier_mois)
+sd(base_nume$Points_de_fidélité)
+sd(base_nume$Social_media_engagement)
+```
+
+
+```{r}
+#Relation entre la variable cible et les variables categorielles
+base_cate <- as.data.frame(base_cate)
+for (j in 1:4){
+  tab <- table(base_cate[,j],base_cate$Seuil_panier)
+  tab <- rbind(tab)
+}
+
+# Table des fréquences
+print(round((prop.table(tab, margin = 1))*100, 2))
+
+```
+
+
+```{r}
+# Charger la librairie ggplot2
+#library(ggplot2)
+ par(mfrow=c(4, 2))
+# Définir les couleurs pour les graphiques
+my_colors <- c("#0072B2", "#009E73", "#D55E00", "#CC79A7")
+
+# Créer et afficher les graphiques un par un
+for (var in c("Age", "Revenu","Durée_adhésion", "Dernier_achat","Moy_valeur_panier","Visites_en_ligne_dernier_mois","Points_de_fidélité","Social_media_engagement")) {
+  # Créer le graphique
+  p <- ggplot(Dataset, aes_string(x = "Seuil_panier", y = var, fill = "Seuil_panier")) +
+    geom_point(color = my_colors[1]) +
+    geom_boxplot(alpha = 0.5) +
+    stat_summary(fun.min = min, fun.max = max, fun = median, geom = "point", color = my_colors[3], size = 3) +
+    theme_minimal() +
+    labs(title = paste("Boxplot avec la variable '", var," '"),
+         x = "Seuil_panier",
+         y = var,
+         fill = "Seuil_panier") +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5),
+          axis.title = element_text(face = "bold"),
+          legend.title = element_text(face = "bold"),
+          legend.text = element_text(face = "bold"))
+
+  # Afficher le graphique dans une fenêtre séparée
+  print(p)
+  ggsave(filename = paste0(var, ".png"), plot = p)
+}
+
+```
+
+
+```{r}
+# Partition de l'échantillon
+set.seed(1)
+
+# Exclusion de la variable Moy_valeur_panier
+Dataset2 <- Dataset[,-7]
+
+# indice Echantillon entrainement 75%
+train_indice <- sample(1:nrow(Dataset), 0.75*nrow(Dataset2))
+
+data_train <- Dataset2[train_indice,] 
+
+# Echantillom test
+data_test <- Dataset2[- train_indice,]
+```
+
+
+# Arbre de Décision
+```{r}
+set.seed(1)
+# Balancer les données qui seront dans Datasete
+Datasete <- Dataset2
+
+# visualison d'abord Dataset2
+table(Datasete$Seuil_panier)
+
+# Installer et charger le package ROSE 
+#install.packages("ROSE") 
+#library(ROSE) 
+
+# Appliquer la fonction ROSE pour équilibrer les données 
+Datasete_balance <- ROSE(Seuil_panier ~ ., data = Datasete, seed = 1, p = 0.5)$data 
+
+# Vérifier la distribution des classes
+table(Datasete_balance$Seuil_panier)
+```
+```{r}
+#  Une fois les données balancées, je refais refait les traitement
+
+# Partition de l'échantillon
+set.seed(123)
+
+# Reaffection des donnees balancees
+Dataset2 <- Datasete_balance
+
+#Verifier equilibrer
+table(Dataset2$Seuil_panier)
+
+# indice Echantillon entrainement 75%
+train_indice <- sample(1:nrow(Dataset), 0.75*nrow(Dataset2))
+
+data_train <- Dataset2[train_indice,] 
+
+# Echantillom test
+data_test <- Dataset2[- train_indice,]
+```
+
+```{r}
+library(ISLR2)
+library(tree)
+
+# Arbre sur données entrainement
+tree.train <- tree(Seuil_panier ~ . , data = data_train)
+
+# Pour résumer les resultats 
+summary(tree.train)
+# taux d'erreur de 26,51% 
+#"Durée_adhésion"   et  "Points_de_fidélité" retenues
+```
+
+
+```{r}
+library(rpart)
+# Visualisation de l'arbre 
+# N"B Executer ce chunk simultanément
+plot(tree.train)
+# Affichage de l'arbre avec les attributs des variables 
+text(tree.train, pretty = 0)
+```
+
+```{r}
+### Calcul de performance de l'arbre sur données entrainement
+# type = "class"instructs Rto return the actual class prediction
+train <- sample(1:nrow(Dataset2), 0.75*nrow(Dataset))
+
+clients.test <- Dataset2[-train,]
+
+Seuil_panier <- Dataset2$Seuil_panier
+
+Seuil_panier.test <- Seuil_panier[-train]
+
+tree.clients <- tree(data_train$Seuil_panier ~., data = data_train)#Dataset, subset= train)
+```
+
+```{r}
+library(rpart)
+plot(tree.clients)
+# Affichage de l'arbre avec les attributs des variables 
+text(tree.clients, pretty = 0)
+```
+```{r}
+# une verification personnelle sur train data
+clients.train <- Dataset[train,]
+Seuil_panier.train <- Seuil_panier[train]
+
+tree.pred <- predict(tree.clients, clients.train , type = "class")
+
+table(tree.pred, Seuil_panier.train )
+```
+
+```{r}
+tree.pred <- predict(tree.clients, clients.test, type = "class")
+
+table(tree.pred, Seuil_panier.test)
+```
+```{r}
+# Validation croisée
+cv.clients <- cv.tree(tree.clients, FUN = prune.misclass)
+names(cv.clients)
+cv.clients$dev # erreur validation croisée à minimiser
+cv.clients$size # nombre de noeuds terminaux
+
+
+```
+```{r}
+summary(tree.train)
+```
+
+```{r}
+prune.clients <- prune.misclass(tree.clients, best = 3)
+plot(prune.clients)
+text(prune.clients, pretty = 0)
+
+```
+```{r}
+tree.pred <- predict(prune.clients, clients.test,
+    type = "class")
+
+table(tree.pred, Seuil_panier.test)
+
+```
+```{r}
+# base de données clients null
+tree.pred_clients_null <- predict(prune.clients, clients_null_e,
+    type = "class")
+
+summary(tree.pred_clients_null)
+```
+
+
+# KNN
+
+```{r}
+# Puisque le methode KNN ne prend pas en compte les valeurs non numériques :
+# car basé sur des distances: on pourrait les exclure ou transformer en numérique.
+# Création de la variabe seuil_panier
+Dataset$Genre_num <- ifelse(test = Dataset$Genre =='Homme', 
+                               yes = 1,
+                               no = 0)
+
+Dataset$Catégorie_favorite_num <- ifelse(test = Dataset$Catégorie_favorite =='Mode', 
+                               yes = 0,
+                               ifelse(test = Dataset$Catégorie_favorite =='	Sport', 
+                               yes = 1,
+                               ifelse(test = Dataset$Catégorie_favorite =='Maison', 
+                               yes = 2,
+                               ifelse(test = Dataset$Genre =='Électronique', 
+                               yes = 3,
+                               no = 4))))
+
+Dataset$Segment_num <- ifelse(test = Dataset$Segment =='Occasionnel', 
+                               yes = 0,
+                               ifelse(test = Dataset$Segment =='VIP', 
+                               yes = 1,
+                               no = 2))
+
+
+# Extraction de la base pour Knn
+Dataset_KNN <- Dataset[c(1,2,4,5,6,9,11,12,13,14, 15,16,17)]
+
+# Normalisation des variables
+Dataset_KNN2 <- scale(Dataset_KNN[,-c(1,10)])
+Dataset_KNN3 <- cbind(Dataset_KNN[,c(1,10)], data.frame(Dataset_KNN2))
+Dataset_KNN <- Dataset_KNN3
+```
+
+```{r}
+# Pour la prédiction sur la base clients_null
+clients_null_e_knn <- clients_null_e
+
+clients_null_e_knn$Genre_num <- ifelse(test = clients_null_e_knn$Genre =='Homme', 
+                               yes = 1,
+                               no = 0)
+
+clients_null_e_knn$Catégorie_favorite_num <- ifelse(test = clients_null_e_knn$Catégorie_favorite =='Mode', 
+                               yes = 0,
+                               ifelse(test = clients_null_e_knn$Catégorie_favorite =='	Sport', 
+                               yes = 1,
+                               ifelse(test = clients_null_e_knn$Catégorie_favorite =='Maison', 
+                               yes = 2,
+                               ifelse(test = clients_null_e_knn$Genre =='Électronique', 
+                               yes = 3,
+                               no = 4))))
+
+clients_null_e_knn$Segment_num <- ifelse(test = clients_null_e_knn$Segment =='Occasionnel', 
+                               yes = 0,
+                               ifelse(test = clients_null_e_knn$Segment =='VIP', 
+                               yes = 1,
+                               no = 2))
+
+
+# Extraction de la base pour Knn
+clients_null_e_knn_KNN <- clients_null_e_knn[c(1,2,4,5,6,8,10,11,12,14, 15,16)]
+
+# Normalisation des variables
+clients_null_e_knn_KNN2 <- scale(clients_null_e_knn_KNN[,-1])
+clients_null_e_knn_KNN3 <- cbind(clients_null_e_knn_KNN[,1], data.frame(clients_null_e_knn_KNN2))
+clients_null_e_knn <- clients_null_e_knn_KNN3
+```
+
+
+
+```{r}
+# echantillons test et entrainement en concervant les memes indices sur les arbres
+clients.train_Knn <- Dataset_KNN[train,]
+clients.test_Knn <- Dataset_KNN[-train,]
+
+## Valifation croisée pour trouver le meilleur k
+# Définir la grille de recherche de k
+k_values <- seq(1, 20, by = 2)
+
+# Effectuer la validation croisée pour trouver le meilleur k
+cv_kknn0 <- train.kknn(clients.train_Knn$Seuil_panier ~ . , data = clients.train_Knn , kmax = max(k_values), kernel = "rectangular", kcv = 10) ## par defaut c'est la distance de Minkowski 
+
+# Afficher les résultats de la validation croisée
+print(cv_kknn0) # le meilleur k est ainsi 18
+```
+
+
+```{r}
+set.seed(1)
+library(class)
+# Appliquons le Knn avec k=18 et évaluons la performance avec les données test
+# On reconverti 
+clients.train_Knn <- data.frame(lapply(clients.train_Knn, function(x) if(is.factor(x)) as.numeric(x) else x))
+clients.test_Knn <- data.frame(lapply(clients.test_Knn, function(x) if(is.factor(x)) as.numeric(x) else x))
+
+knn.pred <- knn(clients.train_Knn , clients.test_Knn, clients.train_Knn$Seuil_panier, k = 18)
+summary(knn.pred)
+
+# Créer une matrice de confusion en spécifiant la classe positive
+library(caret)
+conf_matrix <- confusionMatrix(factor(knn.pred, levels = c(1, 2)), 
+                                factor(clients.test_Knn$Seuil_panier, levels = c(1, 2)))
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix)
+
+```
+
+```{r}
+set.seed(1)
+# prediction des clients
+
+# Appliquons le Knn avec k=18 et évaluons la performance avec les données test
+# On reconverti 
+clients_null_e_knn$Seuil_panier <- 0
+
+clients_null_e_knn<- data.frame(lapply(clients_null_e_knn, function(x) if(is.factor(x)) as.numeric(x) else x))
+
+knn.pred_null <- knn(clients.train_Knn , clients_null_e_knn,  clients.train_Knn$Seuil_panier, k = 18)
+summary(knn.pred_null)
+
+
+```
+
+# Random forest
+```{r}
+set.seed(1)
+#install.packages('randomForest')
+library(randomForest)
+#N.B: Random forest=bagging lorsque m=p
+
+# Extraction de la base pour random forest
+Dataset_forest <- Dataset[c(1,2,4,5,6,9,11,12,13,14, 15,16,17)]
+Dataset_forest2 <- Dataset[, c(1:6, 8:14)] #libellés de base
+
+clients.train_forest <- Dataset_forest[train,]
+clients.test_forest <- Dataset_forest2[-train,]
+
+model_train_forest <- randomForest(Seuil_panier ~ . -1, 
+                                   data = Dataset_forest2 ,
+                                   subset = train,
+                                   mtry = 6, # indique le nombre de prédicteurs à considerer
+                                              # Si ce nombre est égal au nombre total de predicteurs
+                                              # alors on est dans le bagging
+                                              # Pour une random on prend mtry=p/3 par defaut
+                                   importance = TRUE # voir importance de chaque variable
+                                   )
+model_train_forest
+```
+
+
+```{r}
+importance(model_train_forest)
+```
+
+
+```{r}
+varImpPlot(model_train_forest)
+```
+```{r}
+set.seed(1)
+# Application sur les données test
+clients.test_forest <- Dataset_forest2[-train, ]
+
+#Predict
+pred_forest <- predict(model_train_forest, newdata = clients.test_forest)
+
+#Matrix de confusion
+conf_matrix_forest <- confusionMatrix(pred_forest, 
+                                clients.test_forest$Seuil_panier
+                                )
+# Afficher la matrice de confusion modifiée
+print(conf_matrix_forest)
+```
+```{r}
+# Pour la prédiction sur la base clients_null
+clients_null_e_forest <- clients_null_e
+
+#Predict
+pred_forest <- predict(model_train_forest, newdata = clients_null_e_forest)
+
+#resultat
+pred_forest
+
+ftable(pred_forest)
+```
+
+# Réseaux de neuronnes
